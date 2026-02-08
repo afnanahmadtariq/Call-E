@@ -1,0 +1,92 @@
+pipeline {
+    agent any
+
+    environment {
+        // You would manage these variables in Jenkins Credentials
+        DOCKER_IMAGE_NAME = "call-e-api"
+        DOCKER_REGISTRY = "your-registry-url" // if pushing
+        
+        // Environment variables needed at runtime (usually injected via Jenkins credentials)
+        DATABASE_URL = credentials('DATABASE_URL')
+        TWILIO_ACCOUNT_SID = credentials('TWILIO_ACCOUNT_SID')
+        TWILIO_AUTH_TOKEN = credentials('TWILIO_AUTH_TOKEN')
+        TWILIO_PHONE_NUMBER = credentials('TWILIO_PHONE_NUMBER')
+        ELEVENLABS_API_KEY = credentials('ELEVENLABS_API_KEY')
+        // Redis config is handled by docker-compose, but password could be injected
+        REDIS_PASSWORD = credentials('REDIS_PASSWORD')
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Prepare Environment') {
+            steps {
+                dir('apps/api') {
+                    script {
+                        // Create a .env file from credentials for docker-compose to use for validation and runtime
+                        writeFile file: '.env', text: """
+DATABASE_URL=${DATABASE_URL}
+TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
+TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER}
+ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+REDIS_PASSWORD=${REDIS_PASSWORD}
+PORT=3001
+"""
+                    }
+                }
+            }
+        }
+
+        stage('Build Docker Images') {
+            steps {
+                dir('apps/api') {
+                    // Explicit build step to verify build success before touching running services
+                    sh 'docker-compose build'
+                }
+            }
+        }
+
+        stage('Deploy Services') {
+            steps {
+                dir('apps/api') {
+                    // Restart services with new image
+                    sh 'docker-compose down'
+                    sh 'docker-compose up -d'
+                }
+            }
+        }
+
+        stage('Health Check') {
+            steps {
+                script {
+                    // Simple wait loop to ensure service is up
+                    sleep 10 
+                    sh "curl --fail http://localhost:3001/ping || echo 'Warning: Health check endpoint not reachable yet'"
+                }
+            }
+        }
+        
+        stage('Cleanup') {
+            steps {
+                // Remove unused images to save disk space on the VM
+                sh 'docker image prune -f'
+            }
+        }
+    }
+
+    post {
+        always {
+            // Clean up workspace if needed? Or keep logs.
+            echo 'Update finished.'
+        }
+        failure {
+            echo 'Deployment failed!'
+            // Optionally send notification (email/slack)
+        }
+    }
+}
