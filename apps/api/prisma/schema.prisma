@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = "postgresql://user:password@localhost:5432/calle_db?schema=public"
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String?
+  tasks     Task[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Task {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id])
+  serviceType String
+  dateRange   String?
+  timeWindow  String?
+  location    String?
+  urgency     String?   // ASAP, Flexible
+  status      String    @default("PENDING") // PENDING, CALLING, NEGOTIATING, CONFIRMED, FAILED
+  call        CallLog?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model CallLog {
+  id          Int      @id @default(autoincrement())
+  taskId      Int      @unique
+  task        Task     @relation(fields: [taskId], references: [id])
+  callSid     String?  // Twilio Call SID
+  agentId     String?  // ElevenLabs Agent ID
+  transcript  String?
+  status      String   @default("INITIATED")
+  startedAt   DateTime @default(now())
+  endedAt     DateTime?
+}
+
+model Provider {
+  id          Int      @id @default(autoincrement())
+  name        String
+  serviceType String
+  phone       String
+  location    String?
+  rating      Float?
+}

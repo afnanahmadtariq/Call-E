@@ -1,5 +1,5 @@
 {
-  "name": "Call-E",
+  "name": "call-e",
   "private": true,
   "scripts": {
     "build": "turbo run build",
